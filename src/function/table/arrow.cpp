@@ -319,6 +319,13 @@ void ArrowTableFunction::RegisterFunction(BuiltinFunctions &set) {
 	arrow.projection_pushdown = true;
 	arrow.filter_pushdown = true;
 	set.AddFunction(arrow);
+
+	TableFunction arrow_np("arrow_np_scan", {LogicalType::POINTER, LogicalType::POINTER, LogicalType::POINTER},
+	                    ArrowScanFunction, ArrowScanBind, ArrowScanInitGlobal, ArrowScanInitLocal);
+	arrow_np.cardinality = ArrowScanCardinality;
+	arrow_np.projection_pushdown = true;
+	arrow_np.filter_pushdown = false;
+	set.AddFunction(arrow_np);
 }
 
 void BuiltinFunctions::RegisterArrowFunctions() {

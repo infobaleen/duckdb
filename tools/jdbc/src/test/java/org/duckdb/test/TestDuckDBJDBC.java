@@ -60,7 +60,7 @@ public class TestDuckDBJDBC {
 		if (a == null && b == null) {
 			return;
 		}
-		assertTrue(a.equals(b), String.format("%s should equal %s", a, b));
+		assertTrue(a.equals(b), String.format("\"%s\" should equal \"%s\"", a, b));
 	}
 
 	private static void assertNull(Object a) throws Exception {
@@ -72,7 +72,22 @@ public class TestDuckDBJDBC {
 	}
 
 	private static void fail() throws Exception {
-		assertTrue(false);
+		fail(null);
+	}
+
+	private static void fail(String s) throws Exception {
+		throw new Exception(s);
+	}
+
+	private static <T extends Throwable> String assertThrows(Thrower thrower, Class<T> exception) throws Exception {
+		try {
+			thrower.run();
+			fail("Expected to throw " + exception.getName());
+			return null;
+		} catch (Throwable e) {
+			assertEquals(e.getClass(), exception);
+			return e.getMessage();
+		}
 	}
 
 	static {
@@ -427,7 +442,7 @@ public class TestDuckDBJDBC {
 		assertTrue(((OffsetDateTime) rs.getObject(2)).isEqual(odt2Rounded));
 
 		// Metadata tests
-		assertEquals(Types.TIME_WITH_TIMEZONE,
+		assertEquals(Types.TIMESTAMP_WITH_TIMEZONE,
 				((DuckDBResultSetMetaData) meta).type_to_int(DuckDBColumnType.TIMESTAMP_WITH_TIME_ZONE));
 		assertTrue(OffsetDateTime.class.toString().equals(meta.getColumnClassName(2)));
 
@@ -1570,9 +1585,9 @@ public class TestDuckDBJDBC {
 
 		rs = md.getSchemas(null, "ma%");
 		assertTrue(rs.next());
-		assertEquals(rs.getString("TABLE_SCHEM"), "main");
+		assertEquals(rs.getString("TABLE_SCHEM"), DuckDBDatabase.DEFAULT_SCHEMA);
 		assertNull(rs.getObject("TABLE_CATALOG"));
-		assertEquals(rs.getString(1), "main");
+		assertEquals(rs.getString(1), DuckDBDatabase.DEFAULT_SCHEMA);
 		assertNull(rs.getObject(2));
 
 		assertFalse(rs.next());
@@ -1587,8 +1602,8 @@ public class TestDuckDBJDBC {
 		assertTrue(rs.next());
 		assertNull(rs.getObject("TABLE_CAT"));
 		assertNull(rs.getObject(1));
-		assertEquals(rs.getString("TABLE_SCHEM"), "main");
-		assertEquals(rs.getString(2), "main");
+		assertEquals(rs.getString("TABLE_SCHEM"), DuckDBDatabase.DEFAULT_SCHEMA);
+		assertEquals(rs.getString(2), DuckDBDatabase.DEFAULT_SCHEMA);
 		assertEquals(rs.getString("TABLE_NAME"), "a");
 		assertEquals(rs.getString(3), "a");
 		assertEquals(rs.getString("TABLE_TYPE"), "BASE TABLE");
@@ -1609,8 +1624,8 @@ public class TestDuckDBJDBC {
 		assertTrue(rs.next());
 		assertNull(rs.getObject("TABLE_CAT"));
 		assertNull(rs.getObject(1));
-		assertEquals(rs.getString("TABLE_SCHEM"), "main");
-		assertEquals(rs.getString(2), "main");
+		assertEquals(rs.getString("TABLE_SCHEM"), DuckDBDatabase.DEFAULT_SCHEMA);
+		assertEquals(rs.getString(2), DuckDBDatabase.DEFAULT_SCHEMA);
 		assertEquals(rs.getString("TABLE_NAME"), "b");
 		assertEquals(rs.getString(3), "b");
 		assertEquals(rs.getString("TABLE_TYPE"), "VIEW");
@@ -1631,13 +1646,13 @@ public class TestDuckDBJDBC {
 		assertFalse(rs.next());
 		rs.close();
 
-		rs = md.getTables(null, "main", "a", null);
+		rs = md.getTables(null, DuckDBDatabase.DEFAULT_SCHEMA, "a", null);
 
 		assertTrue(rs.next());
 		assertNull(rs.getObject("TABLE_CAT"));
 		assertNull(rs.getObject(1));
-		assertEquals(rs.getString("TABLE_SCHEM"), "main");
-		assertEquals(rs.getString(2), "main");
+		assertEquals(rs.getString("TABLE_SCHEM"), DuckDBDatabase.DEFAULT_SCHEMA);
+		assertEquals(rs.getString(2), DuckDBDatabase.DEFAULT_SCHEMA);
 		assertEquals(rs.getString("TABLE_NAME"), "a");
 		assertEquals(rs.getString(3), "a");
 		assertEquals(rs.getString("TABLE_TYPE"), "BASE TABLE");
@@ -1658,7 +1673,7 @@ public class TestDuckDBJDBC {
 
 		rs.close();
 
-		rs = md.getTables(null, "main", "xxx", null);
+		rs = md.getTables(null, DuckDBDatabase.DEFAULT_SCHEMA, "xxx", null);
 		assertFalse(rs.next());
 		rs.close();
 
@@ -1666,8 +1681,8 @@ public class TestDuckDBJDBC {
 		assertTrue(rs.next());
 		assertNull(rs.getObject("TABLE_CAT"));
 		assertNull(rs.getObject(1));
-		assertEquals(rs.getString("TABLE_SCHEM"), "main");
-		assertEquals(rs.getString(2), "main");
+		assertEquals(rs.getString("TABLE_SCHEM"), DuckDBDatabase.DEFAULT_SCHEMA);
+		assertEquals(rs.getString(2), DuckDBDatabase.DEFAULT_SCHEMA);
 		assertEquals(rs.getString("TABLE_NAME"), "a");
 		assertEquals(rs.getString(3), "a");
 		assertEquals(rs.getString("COLUMN_NAME"), "i");
@@ -1686,12 +1701,12 @@ public class TestDuckDBJDBC {
 		assertFalse(rs.next());
 		rs.close();
 
-		rs = md.getColumns(null, "main", "a", "i");
+		rs = md.getColumns(null, DuckDBDatabase.DEFAULT_SCHEMA, "a", "i");
 		assertTrue(rs.next());
 		assertNull(rs.getObject("TABLE_CAT"));
 		assertNull(rs.getObject(1));
-		assertEquals(rs.getString("TABLE_SCHEM"), "main");
-		assertEquals(rs.getString(2), "main");
+		assertEquals(rs.getString("TABLE_SCHEM"), DuckDBDatabase.DEFAULT_SCHEMA);
+		assertEquals(rs.getString(2), DuckDBDatabase.DEFAULT_SCHEMA);
 		assertEquals(rs.getString("TABLE_NAME"), "a");
 		assertEquals(rs.getString(3), "a");
 		assertEquals(rs.getString("COLUMN_NAME"), "i");
@@ -1709,12 +1724,12 @@ public class TestDuckDBJDBC {
 		rs.close();
 
 		// try with catalog as well
-		rs = md.getColumns(conn.getCatalog(), "main", "a", "i");
+		rs = md.getColumns(conn.getCatalog(), DuckDBDatabase.DEFAULT_SCHEMA, "a", "i");
 		assertTrue(rs.next());
 		assertNull(rs.getObject("TABLE_CAT"));
 		assertNull(rs.getObject(1));
-		assertEquals(rs.getString("TABLE_SCHEM"), "main");
-		assertEquals(rs.getString(2), "main");
+		assertEquals(rs.getString("TABLE_SCHEM"), DuckDBDatabase.DEFAULT_SCHEMA);
+		assertEquals(rs.getString(2), DuckDBDatabase.DEFAULT_SCHEMA);
 		assertEquals(rs.getString("TABLE_NAME"), "a");
 		assertEquals(rs.getString(3), "a");
 		assertEquals(rs.getString("COLUMN_NAME"), "i");
@@ -1735,11 +1750,11 @@ public class TestDuckDBJDBC {
 		assertFalse(rs.next());
 		rs.close();
 
-		rs = md.getColumns(null, "main", "xxx", "i");
+		rs = md.getColumns(null, DuckDBDatabase.DEFAULT_SCHEMA, "xxx", "i");
 		assertFalse(rs.next());
 		rs.close();
 
-		rs = md.getColumns(null, "main", "a", "xxx");
+		rs = md.getColumns(null, DuckDBDatabase.DEFAULT_SCHEMA, "a", "xxx");
 		assertFalse(rs.next());
 		rs.close();
 
@@ -1790,7 +1805,7 @@ public class TestDuckDBJDBC {
 
 		// int8, int4, int2, int1, float8, float4
 		stmt.execute("CREATE TABLE numbers (a BIGINT, b INTEGER, c SMALLINT, d TINYINT, e DOUBLE, f FLOAT)");
-		DuckDBAppender appender = conn.createAppender("main", "numbers");
+		DuckDBAppender appender = conn.createAppender(DuckDBDatabase.DEFAULT_SCHEMA, "numbers");
 
 		for (int i = 0; i < 50; i++) {
 			appender.beginRow();
@@ -1836,7 +1851,7 @@ public class TestDuckDBJDBC {
 		Statement stmt = conn.createStatement();
 
 		stmt.execute("CREATE TABLE data (a INTEGER, s VARCHAR)");
-		DuckDBAppender appender = conn.createAppender("main", "data");
+		DuckDBAppender appender = conn.createAppender(DuckDBDatabase.DEFAULT_SCHEMA, "data");
 
 		for (int i = 0; i < 1000; i++) {
 			appender.beginRow();
@@ -1866,7 +1881,7 @@ public class TestDuckDBJDBC {
 
 		stmt.execute("CREATE TABLE data (str_value VARCHAR(10))");
 		String expectedValue = "䭔\uD86D\uDF7C🔥\uD83D\uDE1C";
-		try (DuckDBAppender appender = conn.createAppender("main", "data")) {
+		try (DuckDBAppender appender = conn.createAppender(DuckDBDatabase.DEFAULT_SCHEMA, "data")) {
 			appender.beginRow();
 			appender.append(expectedValue);
 			appender.endRow();
@@ -1890,7 +1905,7 @@ public class TestDuckDBJDBC {
 
 		try {
 			@SuppressWarnings("unused")
-			DuckDBAppender appender = conn.createAppender("main", "data");
+			DuckDBAppender appender = conn.createAppender(DuckDBDatabase.DEFAULT_SCHEMA, "data");
 			fail();
 		} catch (SQLException e) {
 		}
@@ -1904,7 +1919,7 @@ public class TestDuckDBJDBC {
 		Statement stmt = conn.createStatement();
 
 		stmt.execute("CREATE TABLE data (a INTEGER)");
-		DuckDBAppender appender = conn.createAppender("main", "data");
+		DuckDBAppender appender = conn.createAppender(DuckDBDatabase.DEFAULT_SCHEMA, "data");
 
 		appender.beginRow();
 		appender.append(1);
@@ -1932,7 +1947,7 @@ public class TestDuckDBJDBC {
 
 		stmt.execute("CREATE TABLE data (a INTEGER)");
 		stmt.close();
-		DuckDBAppender appender = conn.createAppender("main", "data");
+		DuckDBAppender appender = conn.createAppender(DuckDBDatabase.DEFAULT_SCHEMA, "data");
 
 		try {
 			appender.beginRow();
@@ -1951,7 +1966,7 @@ public class TestDuckDBJDBC {
 
 		stmt.execute("CREATE TABLE data (a INTEGER, b INTEGER)");
 		stmt.close();
-		DuckDBAppender appender = conn.createAppender("main", "data");
+		DuckDBAppender appender = conn.createAppender(DuckDBDatabase.DEFAULT_SCHEMA, "data");
 
 		try {
 			appender.beginRow();
@@ -1969,7 +1984,7 @@ public class TestDuckDBJDBC {
 		Statement stmt = conn.createStatement();
 
 		stmt.execute("CREATE TABLE data (a INTEGER)");
-		DuckDBAppender appender = conn.createAppender("main", "data");
+		DuckDBAppender appender = conn.createAppender(DuckDBDatabase.DEFAULT_SCHEMA, "data");
 
 		try {
 			appender.beginRow();
@@ -1988,7 +2003,7 @@ public class TestDuckDBJDBC {
 
 		stmt.execute("CREATE TABLE data (a INTEGER)");
 
-		DuckDBAppender appender = conn.createAppender("main", "data");
+		DuckDBAppender appender = conn.createAppender(DuckDBDatabase.DEFAULT_SCHEMA, "data");
 
 		appender.beginRow();
 		appender.append(null);
@@ -2013,7 +2028,7 @@ public class TestDuckDBJDBC {
 
 		stmt.execute("CREATE TABLE data (a VARCHAR)");
 
-		DuckDBAppender appender = conn.createAppender("main", "data");
+		DuckDBAppender appender = conn.createAppender(DuckDBDatabase.DEFAULT_SCHEMA, "data");
 
 		appender.beginRow();
 		appender.append(null);
@@ -2229,7 +2244,7 @@ public class TestDuckDBJDBC {
 	public static void test_get_schema() throws Exception {
 		DuckDBConnection conn = (DuckDBConnection) DriverManager.getConnection("jdbc:duckdb:");
 
-		assertEquals(conn.getSchema(), "main");
+		assertEquals(conn.getSchema(), DuckDBDatabase.DEFAULT_SCHEMA);
 
 		try (Statement stmt = conn.createStatement()) {
 			stmt.execute("CREATE SCHEMA alternate_schema;");
@@ -2249,7 +2264,7 @@ public class TestDuckDBJDBC {
 	}
 
 	/**
-	 * @see GH3906
+	 * @see {https://github.com/duckdb/duckdb/issues/3906}
 	 */
 	public static void test_cached_row_set() throws Exception {
 		CachedRowSet rowSet = RowSetProvider.newFactory().createCachedRowSet();
@@ -2267,14 +2282,25 @@ public class TestDuckDBJDBC {
 		try (Statement stmt = conn.createStatement()) {
 			ResultSet rs = stmt.executeQuery("select [1, 5]::JSON");
 			rs.next();
+			assertEquals(rs.getMetaData().getColumnType(1), Types.JAVA_OBJECT);
 			JsonNode jsonNode = (JsonNode) rs.getObject(1);
 			assertTrue(jsonNode.isArray());
 			assertEquals(jsonNode.toString(), "[1, 5]");
 		}
 
 		try (Statement stmt = conn.createStatement()) {
-			ResultSet rs = stmt.executeQuery("select \'hello\'::JSON");
+			ResultSet rs = stmt.executeQuery("select {'key': 'value'}::JSON");
 			rs.next();
+			assertEquals(rs.getMetaData().getColumnType(1), Types.JAVA_OBJECT);
+			JsonNode jsonNode = (JsonNode) rs.getObject(1);
+			assertTrue(jsonNode.isObject());
+			assertEquals(jsonNode.toString(), "{'key': value}"); // this isn't valid json output, must load json extension for that
+		}
+
+		try (Statement stmt = conn.createStatement()) {
+			ResultSet rs = stmt.executeQuery("select 'hello'::JSON");
+			rs.next();
+			assertEquals(rs.getMetaData().getColumnType(1), Types.JAVA_OBJECT);
 			JsonNode jsonNode = (JsonNode) rs.getObject(1);
 			assertTrue(jsonNode.isString());
 			assertEquals(jsonNode.toString(), "hello");
@@ -2309,6 +2335,115 @@ public class TestDuckDBJDBC {
 
 		rs.next();
 		assertEquals(rs.getString(1), "INTEGER");
+	}
+	
+	public static void test_config() throws Exception {
+		String memory_limit = "memory_limit";
+		String threads = "threads";
+
+		Properties info = new Properties();
+		info.put(memory_limit, "500MB");
+		info.put(threads, "5");
+		Connection conn = DriverManager.getConnection("jdbc:duckdb:", info);
+
+		assertEquals("500.0MB", getSetting(conn, memory_limit));
+		assertEquals("5", getSetting(conn, threads));
+	}
+
+	public static void test_invalid_config() throws Exception {
+		Properties info = new Properties();
+		info.put("invalid config name", "true");
+
+		String message = assertThrows(
+				() -> DriverManager.getConnection("jdbc:duckdb:", info),
+				SQLException.class
+		);
+
+		assertEquals(message, "Catalog Error: unrecognized configuration parameter \"invalid config name\"\n\nDid you mean: \"enable_profiling\"");
+	}
+
+	private static String getSetting(Connection conn, String settingName) throws Exception {
+		try (PreparedStatement stmt = conn.prepareStatement("select value from duckdb_settings() where name = ?")) {
+			stmt.setString(1, settingName);
+			ResultSet rs = stmt.executeQuery();
+			rs.next();
+
+			return rs.getString(1);
+		}
+	}
+
+	public static void test_describe() throws Exception {
+		Connection conn = DriverManager.getConnection("jdbc:duckdb:");
+
+		try (Statement stmt = conn.createStatement()) {
+			stmt.execute("CREATE TABLE TEST (COL INT DEFAULT 42)");
+
+			ResultSet rs = stmt.executeQuery("DESCRIBE SELECT * FROM TEST");
+			rs.next();
+			assertEquals(rs.getString("column_name"), "COL");
+			assertEquals(rs.getString("column_type"), "INTEGER");
+			assertEquals(rs.getString("null"), "YES");
+			assertNull(rs.getString("key"));
+			assertNull(rs.getString("default"));
+			assertNull(rs.getString("extra"));
+		}
+	}
+
+	public static void test_dont_leak_database() throws Exception {
+		DuckDBDatabase database;
+
+		try (DuckDBConnection conn = (DuckDBConnection) DriverManager.getConnection("jdbc:duckdb:")) {
+			conn.duplicate().close();
+
+			database = conn.getDatabase();
+		}
+
+		assertTrue(database.isShutdown());
+	}
+
+	public static void test_null_bytes_in_string() throws Exception {
+		try (Connection conn = DriverManager.getConnection("jdbc:duckdb:")) {
+			try (PreparedStatement stmt = conn.prepareStatement("select ?::varchar")) {
+				stmt.setObject(1, "bob\u0000r");
+				ResultSet rs = stmt.executeQuery();
+
+				rs.next();
+				assertEquals(rs.getString(1), "bob\u0000r");
+			}
+		}
+	}
+
+	public static void test_get_functions() throws Exception {
+		try (Connection conn = DriverManager.getConnection("jdbc:duckdb:")) {
+			ResultSet functions = conn.getMetaData().getFunctions(null, DuckDBDatabase.DEFAULT_SCHEMA, "string_split");
+
+			assertTrue(functions.next());
+			assertNull(functions.getObject("FUNCTION_CAT"));
+			assertEquals(DuckDBDatabase.DEFAULT_SCHEMA, functions.getString("FUNCTION_SCHEM"));
+			assertEquals("string_split", functions.getString("FUNCTION_NAME"));
+			assertNull(functions.getString("REMARKS"));
+			assertEquals(DatabaseMetaData.functionNoTable, functions.getInt("FUNCTION_TYPE"));
+
+			assertFalse(functions.next());
+
+			// two items for two overloads?
+			functions = conn.getMetaData().getFunctions(null, DuckDBDatabase.DEFAULT_SCHEMA, "read_csv_auto");
+			assertTrue(functions.next());
+			assertNull(functions.getObject("FUNCTION_CAT"));
+			assertEquals(DuckDBDatabase.DEFAULT_SCHEMA, functions.getString("FUNCTION_SCHEM"));
+			assertEquals("read_csv_auto", functions.getString("FUNCTION_NAME"));
+			assertNull(functions.getString("REMARKS"));
+			assertEquals(DatabaseMetaData.functionReturnsTable, functions.getInt("FUNCTION_TYPE"));
+
+			assertTrue(functions.next());
+			assertNull(functions.getObject("FUNCTION_CAT"));
+			assertEquals(DuckDBDatabase.DEFAULT_SCHEMA, functions.getString("FUNCTION_SCHEM"));
+			assertEquals("read_csv_auto", functions.getString("FUNCTION_NAME"));
+			assertNull(functions.getString("REMARKS"));
+			assertEquals(DatabaseMetaData.functionReturnsTable, functions.getInt("FUNCTION_TYPE"));
+
+			assertFalse(functions.next());
+		}
 	}
 
 	public static void main(String[] args) throws Exception {

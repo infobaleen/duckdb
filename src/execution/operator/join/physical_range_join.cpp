@@ -8,16 +8,16 @@
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/main/client_context.hpp"
-#include "duckdb/parallel/event.hpp"
+#include "duckdb/parallel/base_pipeline_event.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 
 #include <thread>
 
 namespace duckdb {
 
-PhysicalRangeJoin::LocalSortedTable::LocalSortedTable(Allocator &allocator, const PhysicalRangeJoin &op,
+PhysicalRangeJoin::LocalSortedTable::LocalSortedTable(ClientContext &context, const PhysicalRangeJoin &op,
                                                       const idx_t child)
-    : op(op), executor(allocator), has_null(0), count(0) {
+    : op(op), executor(context), has_null(0), count(0) {
 	// Initialize order clause expression executor and key DataChunk
 	vector<LogicalType> types;
 	for (const auto &cond : op.conditions) {
@@ -26,6 +26,7 @@ PhysicalRangeJoin::LocalSortedTable::LocalSortedTable(Allocator &allocator, cons
 
 		types.push_back(expr->return_type);
 	}
+	auto &allocator = Allocator::Get(context);
 	keys.Initialize(allocator, types);
 }
 
@@ -104,21 +105,20 @@ private:
 	GlobalSortedTable &table;
 };
 
-class RangeJoinMergeEvent : public Event {
+class RangeJoinMergeEvent : public BasePipelineEvent {
 public:
 	using GlobalSortedTable = PhysicalRangeJoin::GlobalSortedTable;
 
 public:
 	RangeJoinMergeEvent(GlobalSortedTable &table_p, Pipeline &pipeline_p)
-	    : Event(pipeline_p.executor), table(table_p), pipeline(pipeline_p) {
+	    : BasePipelineEvent(pipeline_p), table(table_p) {
 	}
 
 	GlobalSortedTable &table;
-	Pipeline &pipeline;
 
 public:
 	void Schedule() override {
-		auto &context = pipeline.GetClientContext();
+		auto &context = pipeline->GetClientContext();
 
 		// Schedule tasks equal to the number of threads, which will each merge multiple partitions
 		auto &ts = TaskScheduler::GetScheduler(context);
@@ -137,7 +137,7 @@ public:
 		global_sort_state.CompleteMergeRound(true);
 		if (global_sort_state.sorted_blocks.size() > 1) {
 			// Multiple blocks remaining: Schedule the next round
-			table.ScheduleMergeTasks(pipeline, *this);
+			table.ScheduleMergeTasks(*pipeline, *this);
 		}
 	}
 };

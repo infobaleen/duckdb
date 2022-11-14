@@ -86,13 +86,24 @@ bool ValueIsNull(double value) {
 }
 
 template <class T>
-void ScanPandasFpColumn(T *src_ptr, idx_t count, idx_t offset, Vector &out) {
-	FlatVector::SetData(out, (data_ptr_t)(src_ptr + offset));
-	auto tgt_ptr = FlatVector::GetData<T>(out);
+void ScanPandasFpColumn(T *src_ptr, idx_t stride, idx_t count, idx_t offset, Vector &out) {
 	auto &mask = FlatVector::Validity(out);
-	for (idx_t i = 0; i < count; i++) {
-		if (Value::IsNan<T>(tgt_ptr[i])) {
-			mask.SetInvalid(i);
+	if (stride == sizeof(T)) {
+		FlatVector::SetData(out, (data_ptr_t)(src_ptr + offset));
+		// Turn NaN values into NULL
+		auto tgt_ptr = FlatVector::GetData<T>(out);
+		for (idx_t i = 0; i < count; i++) {
+			if (Value::IsNan<T>(tgt_ptr[i])) {
+				mask.SetInvalid(i);
+			}
+		}
+	} else {
+		auto tgt_ptr = FlatVector::GetData<T>(out);
+		for (idx_t i = 0; i < count; i++) {
+			tgt_ptr[i] = src_ptr[stride / sizeof(T) * (i + offset)];
+			if (Value::IsNan<T>(tgt_ptr[i])) {
+				mask.SetInvalid(i);
+			}
 		}
 	}
 }
@@ -145,7 +156,7 @@ static void SetInvalidRecursive(Vector &out, idx_t index) {
 }
 
 //! 'count' is the amount of rows in the 'out' vector
-//! offset is the current row number within this vector
+//! 'offset' is the current row number within this vector
 void ScanPandasObject(PandasColumnBindData &bind_data, PyObject *object, idx_t offset, Vector &out) {
 
 	// handle None
@@ -192,12 +203,15 @@ void ScanPandasObjectColumn(PandasColumnBindData &bind_data, PyObject **col, idx
 	auto gil = make_unique<PythonGILWrapper>(); // We're creating python objects here, so we need the GIL
 
 	for (idx_t i = 0; i < count; i++) {
-		ScanPandasObject(bind_data, col[i], i, out);
+		idx_t source_idx = offset + i;
+		ScanPandasObject(bind_data, col[source_idx], i, out);
 	}
 	gil.reset();
 	VerifyTypeConstraints(out, count);
 }
 
+//! 'offset' is the offset within the column
+//! 'count' is the amount of values we will convert in this batch
 void VectorConversion::NumpyToDuckDB(PandasColumnBindData &bind_data, py::array &numpy_col, idx_t count, idx_t offset,
                                      Vector &out) {
 	switch (bind_data.pandas_type) {
@@ -229,10 +243,10 @@ void VectorConversion::NumpyToDuckDB(PandasColumnBindData &bind_data, py::array 
 		ScanPandasMasked<int64_t>(bind_data, count, offset, out);
 		break;
 	case PandasType::FLOAT_32:
-		ScanPandasFpColumn<float>((float *)numpy_col.data(), count, offset, out);
+		ScanPandasFpColumn<float>((float *)numpy_col.data(), bind_data.numpy_stride, count, offset, out);
 		break;
 	case PandasType::FLOAT_64:
-		ScanPandasFpColumn<double>((double *)numpy_col.data(), count, offset, out);
+		ScanPandasFpColumn<double>((double *)numpy_col.data(), bind_data.numpy_stride, count, offset, out);
 		break;
 	case PandasType::DATETIME:
 	case PandasType::DATETIME_TZ: {
@@ -288,6 +302,7 @@ void VectorConversion::NumpyToDuckDB(PandasColumnBindData &bind_data, py::array 
 		auto tgt_ptr = FlatVector::GetData<string_t>(out);
 		auto &out_mask = FlatVector::Validity(out);
 		unique_ptr<PythonGILWrapper> gil;
+		auto &import_cache = *DuckDBPyConnection::ImportCache();
 
 		// Loop over every row of the arrays contents
 		for (idx_t row = 0; row < count; row++) {
@@ -299,6 +314,15 @@ void VectorConversion::NumpyToDuckDB(PandasColumnBindData &bind_data, py::array 
 				if (val == Py_None) {
 					out_mask.SetInvalid(row);
 					continue;
+				}
+				if (import_cache.pandas.libs.NAType.IsLoaded()) {
+					// If pandas is imported, check if the type is NAType
+					auto val_type = Py_TYPE(val);
+					auto na_type = (PyTypeObject *)import_cache.pandas.libs.NAType().ptr();
+					if (val_type == na_type) {
+						out_mask.SetInvalid(row);
+						continue;
+					}
 				}
 				if (py::isinstance<py::float_>(val) && std::isnan(PyFloat_AsDouble(val))) {
 					out_mask.SetInvalid(row);

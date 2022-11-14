@@ -34,7 +34,6 @@ unique_ptr<Expression> InClauseRewriter::VisitReplace(BoundOperatorExpression &e
 	// IN clause with many children: try to generate a mark join that replaces this IN expression
 	// we can only do this if the expressions in the expression list are scalar
 	for (idx_t i = 1; i < expr.children.size(); i++) {
-		D_ASSERT(expr.children[i]->return_type == in_type);
 		if (!expr.children[i]->IsFoldable()) {
 			// non-scalar expression
 			all_scalar = false;
@@ -73,7 +72,7 @@ unique_ptr<Expression> InClauseRewriter::VisitReplace(BoundOperatorExpression &e
 	chunk.Initialize(context, types);
 	for (idx_t i = 1; i < expr.children.size(); i++) {
 		// resolve this expression to a constant
-		auto value = ExpressionExecutor::EvaluateScalar(*expr.children[i]);
+		auto value = ExpressionExecutor::EvaluateScalar(context, *expr.children[i]);
 		idx_t index = chunk.size();
 		chunk.SetCardinality(chunk.size() + 1);
 		chunk.SetValue(0, index, value);

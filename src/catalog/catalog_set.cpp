@@ -191,11 +191,13 @@ bool CatalogSet::AlterEntry(ClientContext &context, const string &name, AlterInf
 				throw CatalogException(rename_err_msg, original_name, value->name);
 			}
 		}
+	}
+
+	if (value->name != original_name) {
+		// Do PutMapping and DeleteMapping after dependency check
 		PutMapping(context, value->name, entry_index);
 		DeleteMapping(context, original_name);
 	}
-	//! Check the dependency manager to verify that there are no conflicting dependencies with this alter
-	catalog.dependency_manager->AlterObject(context, entry, value.get());
 
 	value->timestamp = transaction.transaction_id;
 	value->child = move(entries[entry_index]);
@@ -207,9 +209,17 @@ bool CatalogSet::AlterEntry(ClientContext &context, const string &name, AlterInf
 	alter_info->Serialize(serializer);
 	BinaryData serialized_alter = serializer.GetData();
 
+	auto new_entry = value.get();
+
 	// push the old entry in the undo buffer for this transaction
 	transaction.PushCatalogEntry(value->child.get(), serialized_alter.data.get(), serialized_alter.size);
 	entries[entry_index] = move(value);
+
+	// Check the dependency manager to verify that there are no conflicting dependencies with this alter
+	// Note that we do this AFTER the new entry has been entirely set up in the catalog set
+	// that is because in case the alter fails because of a dependency conflict, we need to be able to cleanly roll back
+	// to the old entry.
+	catalog.dependency_manager->AlterObject(context, entry, new_entry);
 
 	return true;
 }
@@ -485,7 +495,7 @@ void CatalogSet::AdjustDependency(CatalogEntry *entry, TableCatalogEntry *table,
                                   bool remove) {
 	bool found = false;
 	if (column.Type().id() == LogicalTypeId::ENUM) {
-		for (auto &old_column : table->columns) {
+		for (auto &old_column : table->columns.Logical()) {
 			if (old_column.Name() == column.Name() && old_column.Type().id() != LogicalTypeId::ENUM) {
 				AdjustUserDependency(entry, column, remove);
 				found = true;
@@ -496,7 +506,7 @@ void CatalogSet::AdjustDependency(CatalogEntry *entry, TableCatalogEntry *table,
 		}
 	} else if (!(column.Type().GetAlias().empty())) {
 		auto alias = column.Type().GetAlias();
-		for (auto &old_column : table->columns) {
+		for (auto &old_column : table->columns.Logical()) {
 			auto old_alias = old_column.Type().GetAlias();
 			if (old_column.Name() == column.Name() && old_alias != alias) {
 				AdjustUserDependency(entry, column, remove);
@@ -515,10 +525,12 @@ void CatalogSet::AdjustTableDependencies(CatalogEntry *entry) {
 		auto old_table = (TableCatalogEntry *)entry->parent;
 		auto new_table = (TableCatalogEntry *)entry;
 
-		for (auto &new_column : new_table->columns) {
+		for (idx_t i = 0; i < new_table->columns.LogicalColumnCount(); i++) {
+			auto &new_column = new_table->columns.GetColumnMutable(LogicalIndex(i));
 			AdjustDependency(entry, old_table, new_column, false);
 		}
-		for (auto &old_column : old_table->columns) {
+		for (idx_t i = 0; i < old_table->columns.LogicalColumnCount(); i++) {
+			auto &old_column = old_table->columns.GetColumnMutable(LogicalIndex(i));
 			AdjustDependency(entry, new_table, old_column, true);
 		}
 	}
